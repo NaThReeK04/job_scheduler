@@ -1,0 +1,26 @@
+[
+  {
+    "test_case": "Standard High Frequency (Every 5s)",
+    "payload": {
+      "schedule": "*/5 * * * * *",
+      "api": "https://httpbin.org/post",
+      "type": "ATLEAST_ONCE"
+    }
+  },
+  {
+    "test_case": "Problem Statement Requirement (Specific Cron)",
+    "payload": {
+      "schedule": "31 10-15 1 * * MON-FRI",
+      "api": "https://httpbin.org/post",
+      "type": "ATLEAST_ONCE"
+    }
+  },
+  {
+    "test_case": "Failure & Alerting Test (Invalid URL)",
+    "payload": {
+      "schedule": "*/10 * * * * *",
+      "api": "http://invalid-url-test.local/api",
+      "type": "ATLEAST_ONCE"
+    }
+  }
+]
