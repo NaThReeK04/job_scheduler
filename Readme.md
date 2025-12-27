@@ -193,3 +193,19 @@ curl http://localhost:3000/stats
   }
 }
 ```
+## 🐳 Deployment & High Availability (Bonus)
+
+This project includes a production-ready `docker-compose` setup.
+
+### Features
+* **Containerized Stack:** Node.js services, Redis, and MySQL all run in isolated containers.
+* **High Availability (Dispatcher):** Implements **Leader Election** using Redis locks. Two dispatcher instances run simultaneously; if the leader fails, the standby takes over instantly.
+* **Scalability (Workers):** The configuration launches **3 worker replicas** to process jobs in parallel.
+
+### Running with Docker
+1.  Make sure Docker Desktop is running.
+2.  Run the stack:
+    ```bash
+    docker-compose up --build
+    ```
+3.  The API will be available at `http://localhost:3000`.
