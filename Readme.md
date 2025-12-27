@@ -81,7 +81,8 @@ Worker `BLPOP` → HTTP call → `INSERT` execution history → alert on failure
   "api": "https://httpbin.org/post",
   "type": "ATLEAST_ONCE"
 }
-**Response**
+-**Response**
+
 ```json
 {
   "jobId": 1,
