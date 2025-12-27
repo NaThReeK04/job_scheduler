@@ -24,7 +24,7 @@ The system follows a **Producer–Consumer** pattern decoupled by a high-speed m
 
 ## 📊 Architecture Diagram
 
-```mermaid
+<!-- ```mermaid
 graph TD
     User[User / Client] -->|HTTP POST /jobs| API[API Server]
     API -->|Store Job| DB[(MySQL Database)]
@@ -42,7 +42,7 @@ graph TD
         Worker -->|HTTP Request| ExternalAPI[External API]
         Worker -->|Log Result| DB
         Worker -->|Alert on Failure| Alert[Alert System]
-    end
+    end -->
 ## ⚖ Trade-offs
 
 ### Redis vs In-Memory
