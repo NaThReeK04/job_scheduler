@@ -1,206 +1,183 @@
 # High-Throughput Distributed Job Scheduler
 
-A scalable job scheduler built with Node.js, Redis, and MySQL. It supports thousands of job executions per second with high accuracy, minimal drift, and "at-least-once" execution semantics.
+A scalable job scheduler built with **Node.js, Redis, and MySQL**.  
+It supports thousands of job executions per second with high accuracy, minimal drift, and **at-least-once** execution semantics.
+
+---
 
 ## 🏗 System Design
 
 ### Architecture
-The system follows a **Producer-Consumer** pattern decoupled by a high-speed message broker (Redis).
-1.  **API Layer (Producer):** Accepts job specifications, validates cron strings, persists definitions to MySQL, and adds the initial run time to the Redis Sorted Set.
-2.  **Dispatcher (Scheduler):** A high-performance polling service. It queries the Redis Sorted Set (`ZSET`) for jobs where `score <= now`. It pushes due jobs to the Execution Queue and immediately calculates/updates the *next* run time to ensure schedule accuracy.
-3.  **Worker Pool (Consumer):** Stateless workers that block-pop jobs from the Execution Queue. They perform the HTTP requests and log the full execution history (status, duration, response) to MySQL.
+
+The system follows a **Producer–Consumer** pattern decoupled by a high-speed message broker (**Redis**).
+
+- **API Layer (Producer)**  
+  Accepts job specifications, validates cron strings, persists definitions to MySQL, and adds the initial run time to the Redis Sorted Set.
+
+- **Dispatcher (Scheduler)**  
+  A high-performance polling service. It queries the Redis Sorted Set (`ZSET`) for jobs where `score <= now`, pushes due jobs to the execution queue, and immediately recalculates the next run time to ensure schedule accuracy.
+
+- **Worker Pool (Consumer)**  
+  Stateless workers that block-pop jobs from the execution queue, perform HTTP requests, and log execution history (status, duration, response) to MySQL.
+
+---
+
+## 📊 Architecture Diagram
+
 ```mermaid
 graph TD
     User[User / Client] -->|HTTP POST /jobs| API[API Server]
-    API -->|1. Store Job| DB[(MySQL Database)]
-    API -->|2. Initial Schedule| Redis[(Redis ZSET)]
-    
-    subgraph Scheduling_Loop [Dispatcher Service]
-        Dispatcher -->|3. Poll Due Jobs| Redis
-        Redis -->|4. Push to Queue| Queue[(Redis List)]
-        Dispatcher -->|5. Recalculate Next Run| Redis
-    end
-    
-    subgraph Execution_Layer [Worker Service]
-        Worker -->|6. Pop Job| Queue
-        Worker -->|7. Fetch Details| DB
-        Worker -->|8. HTTP Request| ExternalAPI[External API]
-        Worker -->|9. Log Result| DB
-        Worker -->|10. Alert on Fail| Alert[Alert System]
+    API -->|Store Job| DB[(MySQL Database)]
+    API -->|Initial Schedule| Redis[(Redis ZSET)]
+
+    subgraph Dispatcher_Service
+        Dispatcher -->|Poll Due Jobs| Redis
+        Dispatcher -->|Push to Queue| Queue[(Redis List)]
+        Dispatcher -->|Recalculate Next Run| Redis
     end
 
-    classDef distinct fill:#f9f,stroke:#333,stroke-width:2px;
-    class Redis,DB distinct;
+    subgraph Worker_Service
+        Worker -->|Pop Job| Queue
+        Worker -->|Fetch Details| DB
+        Worker -->|HTTP Request| ExternalAPI[External API]
+        Worker -->|Log Result| DB
+        Worker -->|Alert on Failure| Alert[Alert System]
+    end
+## ⚖ Trade-offs
 
-### Trade-offs
-* **Redis vs. In-Memory:** We chose Redis over local `setTimeout` to ensure persistence across restarts and to allow multiple dispatcher/worker nodes to coordinate without race conditions.
-* **MySQL vs. NoSQL:** MySQL was chosen for the structured relationship between `Jobs` and `Executions`, ensuring data integrity for job configurations.
-* **Drift Minimization:** By decoupling scheduling (Dispatcher) from execution (Worker), long-running HTTP tasks do not block the scheduler, ensuring minimal drift.
+### Redis vs In-Memory
+Redis ensures persistence across restarts and enables horizontal scaling without race conditions.
+
+### MySQL vs NoSQL
+MySQL enforces strong relational integrity between **Jobs** and **Executions**.
+
+### Drift Minimization
+Decoupling scheduling (**Dispatcher**) from execution (**Worker**) prevents long-running jobs from delaying future schedules.
 
 ---
 
 ## 🔄 Data Flow
 
-1.  **Creation:** User POSTs job -> API parses Cron -> Inserts into MySQL -> `ZADD` into Redis (Score = Next Timestamp).
-2.  **Dispatch:** Dispatcher `ZRANGEBYSCORE` (0 to NOW) -> `RPUSH` to Queue -> `ZADD` new Score (Next Run).
-3.  **Execution:** Worker `BLPOP` -> `SELECT` API URL -> `axios.post()` -> `INSERT` History -> Alert if failed.
+### Creation
+User POSTs job → API parses cron → Inserts into MySQL → `ZADD` into Redis (score = next timestamp)
+
+### Dispatch
+Dispatcher `ZRANGEBYSCORE (0 → now)` → `RPUSH` to queue → `ZADD` next run time
+
+### Execution
+Worker `BLPOP` → HTTP call → `INSERT` execution history → alert on failure
 
 ---
 
 ## 🔌 API Design
 
 ### 1. Create Job
-* **Endpoint:** `POST /jobs`
-* **Payload:**
-    ```json
-    {
-      "schedule": "*/5 * * * * *",
-      "api": "[https://httpbin.org/post](https://httpbin.org/post)",
-      "type": "ATLEAST_ONCE"
-    }
-    ```
-* **Response:** `200 OK` `{ "jobId": 1, "nextRun": "..." }`
 
+- **Endpoint:** `POST /jobs`
+
+```json
+{
+  "schedule": "*/5 * * * * *",
+  "api": "https://httpbin.org/post",
+  "type": "ATLEAST_ONCE"
+}
+**Response**
+```json
+{
+  "jobId": 1,
+  "nextRun": "2025-12-27T07:20:00Z"
+}
 ### 2. Get Job Executions
-* **Endpoint:** `GET /jobs/:id/executions`
-* **Response:** List of last 5 runs including status, duration (ms), and timestamps.
 
-### 3. Modify Job
-* **Endpoint:** `PUT /jobs/:id`
-* **Payload:** `{ "schedule": "...", "api": "..." }`
+- **Endpoint:** `GET /jobs/:id/executions`
 
-### 4. System Observability
-* **Endpoint:** `GET /stats`
-* **Response:** Real-time metrics on Queue Depth, Active Schedules, and DB Health.
+Returns the last 5 executions with status, duration, and timestamps.
 
 ---
 
+### 3. Modify Job
+
+- **Endpoint:** `PUT /jobs/:id`
+
+```json
+{
+  "schedule": "*/10 * * * * *",
+  "api": "https://example.com/api"
+}
+### 4. System Observability
+
+- **Endpoint:** `GET /stats`
+
+```json
+{
+  "status": "Operational",
+  "metrics": {
+    "jobs_waiting_in_queue": 0,
+    "total_active_schedules": 2,
+    "database_status": "Connected"
+  }
+}
 ## 🚀 Setup & Run
 
-1.  **Prerequisites:** Node.js, MySQL, Redis.
-2.  **Install:** `npm install`
-3.  **Setup DB:** `npm run setup` (Creates tables automatically)
-4.  **Run Services:**
-    * Terminal 1: `node src/server.js`
-    * Terminal 2: `node src/dispatcher.js`
-    * Terminal 3: `node src/worker.js`
+### Prerequisites
+- Node.js
+- MySQL
+- Redis
 
-##🧪 Testing Guide
+### Installation
+```bash
+npm install
+### Database Setup
 
-----------------
+```bash
+npm run setup
+## Run Services
 
-
-
-Here is how to verify the system works using curl.
-
-
+```bash
+node src/server.js
+node src/dispatcher.js
+node src/worker.js
+## 🧪 Testing Guide
 
 ### Test 1: Schedule a High-Frequency Job (Every 5s)
 
-
-
-**Input:**
-
-
-
-Bash
-
-
-
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   curl -X POST http://localhost:3000/jobs \       -H "Content-Type: application/json" \       -d '{             "schedule": "*/5 * * * * *",             "api": "[https://httpbin.org/post](https://httpbin.org/post)"           }'   `
-
-
-
-**Expected Output (Worker Terminal):**You should see this log appear every 5 seconds:
-
-
-
-Plaintext
-
-
-
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   ⚡ [Worker] Executing Job 1 -> [https://httpbin.org/post](https://httpbin.org/post)   `
-
-
-
+```bash
+curl -X POST http://localhost:3000/jobs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "schedule": "*/5 * * * * *",
+    "api": "https://httpbin.org/post"
+  }'
 ### Test 2: Verify Execution History
 
+```bash
+curl http://localhost:3000/jobs/1/executions
+```json
+[
+  { "id": 5, "status": 200, "duration_ms": 450 },
+  { "id": 4, "status": 200, "duration_ms": 410 }
+]
+### Test 3: Alert System (Fault Tolerance)
 
+```bash
+curl -X POST http://localhost:3000/jobs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "schedule": "*/3 * * * * *",
+    "api": "http://invalid-url-test.local/api"
+  }'
 
-**Input:**Wait 15 seconds, then run:
+### Test 4: System Health Check
 
+```bash
+curl http://localhost:3000/stats
 
-
-Bash
-
-
-
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   curl http://localhost:3000/jobs/1/executions   `
-
-
-
-**Expected Output:**A JSON array of recent runs with HTTP 200 status:
-
-
-
-JSON
-
-
-
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   [    { "id": 5, "status": 200, "duration_ms": 450, ... },    { "id": 4, "status": 200, "duration_ms": 410, ... }  ]   `
-
-
-
-### Test 3: Test Alert System (Fault Tolerance)
-
-
-
-**Input:**Create a job with an invalid API URL.
-
-
-
-Bash
-
-
-
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   curl -X POST http://localhost:3000/jobs \       -H "Content-Type: application/json" \       -d '{             "schedule": "*/3 * * * * *",             "api": "[http://invalid-url-test.local/api](http://invalid-url-test.local/api)"           }'   `
-
-
-
-**Expected Output (Worker Terminal):**The worker should catch the error and trigger the alert system.
-
-
-
-Plaintext
-
-
-
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   🚨 [ALERT SYSTEM] Job 2 Failed Critically!     Reason: getaddrinfo ENOTFOUND invalid-url-test.local     Action: Alert sent to admin dashboard.   `
-
-
-
-### Test 4: Check System Health (Observability)
-
-
-
-**Input:**
-
-
-
-Bash
-
-
-
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   curl http://localhost:3000/stats   `
-
-
-
-**Expected Output:**
-
-
-
-JSON
-
-
-
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   {    "status": "Operational",    "metrics": {      "jobs_waiting_in_queue": 0,      "total_active_schedules": 2,      "database_status": "Connected"    }  }   `
+```json
+{
+  "status": "Operational",
+  "metrics": {
+    "jobs_waiting_in_queue": 0,
+    "total_active_schedules": 2,
+    "database_status": "Connected"
+  }
+}
