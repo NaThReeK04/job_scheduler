@@ -81,6 +81,7 @@ Worker `BLPOP` → HTTP call → `INSERT` execution history → alert on failure
   "api": "https://httpbin.org/post",
   "type": "ATLEAST_ONCE"
 }
+```
 -**Response**
 
 ```json
@@ -88,6 +89,7 @@ Worker `BLPOP` → HTTP call → `INSERT` execution history → alert on failure
   "jobId": 1,
   "nextRun": "2025-12-27T07:20:00Z"
 }
+```
 ### 2. Get Job Executions
 
 - **Endpoint:** `GET /jobs/:id/executions`
@@ -105,6 +107,7 @@ Returns the last 5 executions with status, duration, and timestamps.
   "schedule": "*/10 * * * * *",
   "api": "https://example.com/api"
 }
+```
 ### 4. System Observability
 
 - **Endpoint:** `GET /stats`
@@ -118,6 +121,7 @@ Returns the last 5 executions with status, duration, and timestamps.
     "database_status": "Connected"
   }
 }
+```
 ## 🚀 Setup & Run
 
 ### Prerequisites
@@ -128,16 +132,19 @@ Returns the last 5 executions with status, duration, and timestamps.
 ### Installation
 ```bash
 npm install
+```
 ### Database Setup
 
 ```bash
 npm run setup
+```
 ## Run Services
 
 ```bash
 node src/server.js
 node src/dispatcher.js
 node src/worker.js
+```
 ## 🧪 Testing Guide
 
 ### Test 1: Schedule a High-Frequency Job (Every 5s)
@@ -149,6 +156,7 @@ curl -X POST http://localhost:3000/jobs \
     "schedule": "*/5 * * * * *",
     "api": "https://httpbin.org/post"
   }'
+  ```
 ### Test 2: Verify Execution History
 
 ```bash
@@ -158,6 +166,7 @@ curl http://localhost:3000/jobs/1/executions
   { "id": 5, "status": 200, "duration_ms": 450 },
   { "id": 4, "status": 200, "duration_ms": 410 }
 ]
+```
 ### Test 3: Alert System (Fault Tolerance)
 
 ```bash
@@ -167,12 +176,12 @@ curl -X POST http://localhost:3000/jobs \
     "schedule": "*/3 * * * * *",
     "api": "http://invalid-url-test.local/api"
   }'
-
+```
 ### Test 4: System Health Check
 
 ```bash
 curl http://localhost:3000/stats
-
+```
 ```json
 {
   "status": "Operational",
@@ -182,3 +191,4 @@ curl http://localhost:3000/stats
     "database_status": "Connected"
   }
 }
+```
