@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Environment variables (Sensitive Data)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs
+*.log
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# IDE & Editor configs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build outputs (if you compile code later)
+dist/
+build/
+coverage/
