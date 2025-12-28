@@ -1,5 +1,5 @@
 const express = require('express');
-const parser = require('cron-parser');
+const { CronExpressionParser } = require("cron-parser");
 const { db, redisClient, connectRedis, KEYS } = require('./config/db');
 
 const app = express();
@@ -12,7 +12,7 @@ app.post('/jobs', async (req, res) => {
     if (!schedule || !api) return res.status(400).send("Missing schedule or api");
 
     try {
-        const interval = parser.parseExpression(schedule);
+        const interval = CronExpressionParser.parse(schedule);
         const nextRun = interval.next().toDate();
 
         const [result] = await db.execute(
@@ -52,7 +52,7 @@ app.put('/jobs/:id', async (req, res) => {
     if (!schedule || !api) return res.status(400).send("Missing schedule or api");
 
     try {
-        const interval = parser.parseExpression(schedule);
+        const interval = CronExpressionParser.parse(schedule);
         const nextRun = interval.next().toDate();
         const [result] = await db.execute(
             'UPDATE jobs SET schedule = ?, api_url = ? WHERE id = ?',

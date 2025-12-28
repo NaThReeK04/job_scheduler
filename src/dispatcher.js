@@ -1,5 +1,5 @@
 // src/dispatcher.js
-const parser = require('cron-parser');
+const parser = require("cron-parser");
 const { db, redisClient, connectRedis, KEYS } = require('./config/db');
 
 // HA Constants
@@ -57,7 +57,7 @@ async function processSchedule() {
         await redisClient.rPush(KEYS.EXECUTION_QUEUE, payload);
 
         try {
-            const interval = parser.parseExpression(scheduleStr);
+            const interval = CronExpressionParser.parse(schedule);
             const nextRun = interval.next().toDate().getTime();
             await redisClient.zAdd(KEYS.SCHEDULE_ZSET, { score: nextRun, value: jobId });
             console.log(`[${ID}] Scheduled Job ${jobId} for next run.`);
